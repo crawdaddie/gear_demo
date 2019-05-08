@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 
 import { generateGearShape, generateInvoluteCurve, Gear, System, addShape } from "./gear";
 
@@ -9,9 +10,24 @@ const camera = new THREE.PerspectiveCamera(
 	0.1,
 	1000 )
 
-const renderer = new THREE.WebGLRenderer({ antialias: true})
-renderer.setClearColor( 0xffffff, 1);
-camera.position.z = 50;
+
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true})
+
+renderer.setClearColor( 0xffffff, 0 );
+// const backgroundPlane = new THREE.PlaneBufferGeometry(2 * window.innerWidth, 2 * window.innerHeight);
+// const texture = new THREE.TextureLoader().load( "../static/images/gearhead.jpg");
+// texture.wrapS = THREE.RepeatWrapping;
+// texture.wrapT = THREE.RepeatWrapping;
+// texture.repeat.set( 4, 4 );
+// const planeMaterial = new THREE.MeshLambertMaterial({ map: texture });
+// const plane = new THREE.Mesh(backgroundPlane, planeMaterial);
+// plane.receiveShadow = true;
+// scene.add(plane);
+
+camera.position.z = 30;
+
+
 
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
@@ -22,50 +38,52 @@ window.addEventListener( 'resize', () => {
 	camera.aspect = width / height
 	camera.updateProjectionMatrix()
 })
-// system of gears should all have the same module
 
-const system = new System(3);
-system.add({ teeth: 9 });
-system.add({ teeth: 10 });
-system.add({ teeth: 14 });
-system.add({ teeth: 11 });
+
+
+const controls = new TrackballControls( camera, renderer.domElement );
+controls.rotateSpeed = 1.0;
+controls.zoomSpeed = 1.2;
+controls.panSpeed = 0.8;
+
+
+
+controls.staticMoving = true;
+controls.dynamicDampingFactor = 0.3;
+
+
+const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.6 );
+directionalLight.position.set( 0.75, 0.75, 1.0 ).normalize();
+directionalLight.castShadow = true;
+scene.add( directionalLight );
+// const ambientLight = new THREE.AmbientLight( 0xcccccc, 0.2 );
+// scene.add( ambientLight );
+
+
+
+
+// system of gears should all have the same module
+const system = new System(4);
+system.add({ teeth: 12 });
+system.add({ teeth: 8 });
+// system.add({ teeth: 14 });
+system.add({ teeth: 5 });
 
 system.gears.forEach(gear => {
-	scene.add(gear.mesh);
-	gear.x -= 25;
+	// scene.add(gear.mesh);
+	gear.addToScene(scene)
+	gear.mesh.position.x -= 30;
 });
-
-
-// const shape = new THREE.Shape();
-
-// let involutePoints1 = generateInvoluteCurve(9, 15);
-// let involutePoints2 = involutePoints1.map((vec) => {
-// 	// reflection in ray with half pitch angle
-// 	return new THREE.Vector2(
-// 		Math.cos(1) * vec.x + Math.sin(1) * vec.y,
-// 		Math.sin(1) * vec.x - Math.cos(1) * vec.y
-// 	)
-// });
-
-// const involuteCurve = involutePoints1.concat(involutePoints2.reverse())
-
-
-// shape.moveTo(4, 0);
-// shape.setFromPoints(involuteCurve);
-
-// shape.absarc(0, 0)
-// shape.lineTo(0,0)
-
-// addShape(shape, scene);
-
-// console.log(generateInvoluteCurve(4, 5));
 
 function animate() {
 	requestAnimationFrame( animate )
 	
 	system.gears.forEach((gear, i) => {
-		gear.mesh.rotation.z += 0.001 * gear.rotationSpeed;
+		gear.mesh.rotation.z += 0.01 * gear.rotationSpeed;
 	})
+
+	// mesh.rotation.z += 0.01;
+	controls.update();
 
 	renderer.render( scene, camera )
 }
