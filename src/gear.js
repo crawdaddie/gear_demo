@@ -234,19 +234,23 @@ export class Gear {
 		// store linked gear by relative angle
 		this.linkedGears[angle] = newGear;
 
-		// first mesh as if current rotations were both zero:
-		newGear.rotation = PI + angle - newGear.parameters.alpha;
+		
+
+		// newGear.rotation += PI + angle - newGear.parameters.alpha;
+		// // correct new gear's rotation based on current rotation
+		// newGear.driveBy(this.parameters.alpha - angle);
+		const currentRotation = this.rotation;
+
+		this.rotation += angle - currentRotation - this.parameters.alpha;
+
+		newGear.rotation += PI + angle - newGear.parameters.alpha;
 		newGear.driveBy(this.parameters.alpha - angle);
 
-		// newGear.driveBy(this.rotation);
-		// newGear.rotation += PI - ((this.rotation + angle)*newGear.ratio) - angle;
-
+		this.rotation += currentRotation + this.parameters.alpha - angle;
 		
-		// if (this.pinion) {
-		// 	// if this gear is driven by another
-		// newGear.rotation += this.rotation * newGear.parameters.pitchAngle / 2;
-		// newGear.driveBy(this.rotation * this.parameters.pitchAngle);
-		// }
+		// newGear.driveBy(currentRotation + this.parameters.alpha - angle)
+		// newGear.rotation += newGear.parameters.alpha;
+
 
 		return newGear;
 	}

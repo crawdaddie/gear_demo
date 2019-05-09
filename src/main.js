@@ -3,6 +3,8 @@ import { TrackballControls } from "three/examples/jsm/controls/TrackballControls
 
 import { Gear } from "./gear";
 
+import * as dat from "dat.gui";
+
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(
 	75,
@@ -10,12 +12,25 @@ const camera = new THREE.PerspectiveCamera(
 	0.1,
 	1000 )
 
+// dat.gui controls
+const GearControls = function() {
+	this.speed = 0.01;
+	this.system_mod = 2.1;
+};
+
+const gearControls = new GearControls();
+
+window.addEventListener('load', (e) => {
+	const gui = new dat.GUI();
+  	gui.add(gearControls, 'speed', -0.1, 0.1);
+  	gui.add(gearControls, 'system_mod', 1, 3.0);
+});
+
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true})
 renderer.setClearColor( 0xffffff, 0 );
 camera.position.z = 30;
 
 // canvas stuff
-
 renderer.setSize( window.innerWidth, window.innerHeight );
 document.body.appendChild( renderer.domElement );
 window.addEventListener( 'resize', () => {
@@ -27,14 +42,14 @@ window.addEventListener( 'resize', () => {
 })
 
 
-// controls
-const controls = new TrackballControls( camera, renderer.domElement );
-controls.rotateSpeed = 1.0;
-controls.zoomSpeed = 1.2;
-controls.panSpeed = 0.8;
+// camera controls
+const cameraControls = new TrackballControls( camera, renderer.domElement );
+cameraControls.rotateSpeed = 1.0;
+cameraControls.zoomSpeed = 1.2;
+cameraControls.panSpeed = 0.8;
 
-controls.staticMoving = true;
-controls.dynamicDampingFactor = 0.3;
+cameraControls.staticMoving = true;
+cameraControls.dynamicDampingFactor = 0.3;
 
 
 // lights
@@ -46,13 +61,10 @@ scene.add( directionalLight );
 
 // gears
 // mod = pitch circle diameter / teeth
-// for two gears to mesh the mod must be the same
-const SYSTEM_MOD = 2.1
-
-// gears.push(new Gear(17, SYSTEM_MOD))
-
+// for two gears to mesh the mod must be the same, so we use global system mod from 
+// gear controls
 let gears = new Set();
-let gear = new Gear(17, SYSTEM_MOD);
+let gear = new Gear(17, gearControls.system_mod);
 gear.addToScene(scene);
 gears.add(gear);
 
@@ -60,38 +72,19 @@ gear = gear.addGear(15, 1);
 gear.addToScene(scene);
 gears.add(gear);
 
-
 gear = gear.addGear(19, Math.PI/2);
 gear.addToScene(scene);
 gears.add(gear);
 
-// gear = gear.addGear(20, Math.PI/3);
-// gear.addToScene(scene);
-// gears.add(gear);
-// gear = gear.addGear(19, 2);
-// gear.addToScene(scene);
-// gears.add(gear);
-
-// gear.driveBy(gears[gears.length() - 2].rotation)
-
-
-
-
 
 function animate() {
 	requestAnimationFrame( animate )
-	
-	// system.gears.forEach((gear, i) => {
-	// 	gear.rotation += 0.01 * gear.rotationSpeed;
-	// })
-	// firstGear.rotation += 0.01;
+
 	gears.forEach((gear, i) => {
-		gear.driveBy(0.005);
+		gear.driveBy(gearControls.speed);
 	})
 
-	// mesh.rotation.z += 0.01;
-	controls.update();
-
+	cameraControls.update();
 	renderer.render( scene, camera )
 }
 animate()
