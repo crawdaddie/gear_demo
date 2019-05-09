@@ -20,11 +20,10 @@ const GearControls = function() {
 
 const gearControls = new GearControls();
 
-window.addEventListener('load', (e) => {
-	const gui = new dat.GUI();
-  	gui.add(gearControls, 'speed', -0.1, 0.1);
-  	gui.add(gearControls, 'system_mod', 1, 3.0);
-});
+const gui = new dat.GUI();
+gui.add(gearControls, 'speed', -0.1, 0.1);
+gui.add(gearControls, 'system_mod', 1, 3.0);
+
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true})
 renderer.setClearColor( 0xffffff, 0 );
@@ -47,7 +46,6 @@ const cameraControls = new TrackballControls( camera, renderer.domElement );
 cameraControls.rotateSpeed = 1.0;
 cameraControls.zoomSpeed = 1.2;
 cameraControls.panSpeed = 0.8;
-
 cameraControls.staticMoving = true;
 cameraControls.dynamicDampingFactor = 0.3;
 
@@ -65,14 +63,26 @@ scene.add( directionalLight );
 // gear controls
 let gears = new Set();
 let gear = new Gear(17, gearControls.system_mod);
+let gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
+
 gear.addToScene(scene);
 gears.add(gear);
 
+// gears.addGear copies invariant parameters to new gears for us:
 gear = gear.addGear(15, 1);
+gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
+
 gear.addToScene(scene);
 gears.add(gear);
 
 gear = gear.addGear(19, Math.PI/2);
+gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
 gear.addToScene(scene);
 gears.add(gear);
 

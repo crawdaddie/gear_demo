@@ -171,6 +171,7 @@ export class Gear {
 		this.mod = mod;
 		
 		this.pinion = pinion;
+		this.angle = 0;
 
 
 		// associative array for storing linked gears by their relative angle:
@@ -194,6 +195,26 @@ export class Gear {
 	set rotation(rot) {
 		this.mesh.rotation.z = rot;
 	}
+
+	// // public gui params
+	// get numTeeth() {
+	// 	return this.teeth
+	// }
+
+	// set numTeeth(teeth) {
+	// 	console.log(`setting teeth ${teeth}`);
+	// 	return teeth
+	// }
+
+	// get relativeAngle() {
+	// 	return this.angle
+	// }
+
+	// set relativeAngle(angle) {
+	// 	// set angle of gear relative to pinion
+	// 	console.log(`setting angle ${angle}`);
+	// 	return angle
+	// }
 
 	driveBy(angle) {
 		this.rotation += angle * this.rotationSpeed;
@@ -239,6 +260,7 @@ export class Gear {
 		// newGear.rotation += PI + angle - newGear.parameters.alpha;
 		// // correct new gear's rotation based on current rotation
 		// newGear.driveBy(this.parameters.alpha - angle);
+		newGear.angle = angle;
 		const currentRotation = this.rotation;
 
 		this.rotation += angle - currentRotation - this.parameters.alpha;

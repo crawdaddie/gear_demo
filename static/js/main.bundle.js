@@ -52506,6 +52506,7 @@ class Gear {
 		this.mod = mod;
 		
 		this.pinion = pinion;
+		this.angle = 0;
 
 
 		// associative array for storing linked gears by their relative angle:
@@ -52529,6 +52530,26 @@ class Gear {
 	set rotation(rot) {
 		this.mesh.rotation.z = rot;
 	}
+
+	// // public gui params
+	// get numTeeth() {
+	// 	return this.teeth
+	// }
+
+	// set numTeeth(teeth) {
+	// 	console.log(`setting teeth ${teeth}`);
+	// 	return teeth
+	// }
+
+	// get relativeAngle() {
+	// 	return this.angle
+	// }
+
+	// set relativeAngle(angle) {
+	// 	// set angle of gear relative to pinion
+	// 	console.log(`setting angle ${angle}`);
+	// 	return angle
+	// }
 
 	driveBy(angle) {
 		this.rotation += angle * this.rotationSpeed;
@@ -52574,6 +52595,7 @@ class Gear {
 		// newGear.rotation += PI + angle - newGear.parameters.alpha;
 		// // correct new gear's rotation based on current rotation
 		// newGear.driveBy(this.parameters.alpha - angle);
+		newGear.angle = angle;
 		const currentRotation = this.rotation;
 
 		this.rotation += angle - currentRotation - this.parameters.alpha;
@@ -52630,11 +52652,10 @@ const GearControls = function() {
 
 const gearControls = new GearControls();
 
-window.addEventListener('load', (e) => {
-	const gui = new dat_gui__WEBPACK_IMPORTED_MODULE_3__["GUI"]();
-  	gui.add(gearControls, 'speed', -0.1, 0.1);
-  	gui.add(gearControls, 'system_mod', 1, 3.0);
-});
+const gui = new dat_gui__WEBPACK_IMPORTED_MODULE_3__["GUI"]();
+gui.add(gearControls, 'speed', -0.1, 0.1);
+gui.add(gearControls, 'system_mod', 1, 3.0);
+
 
 const renderer = new three__WEBPACK_IMPORTED_MODULE_0__["WebGLRenderer"]({ antialias: true, alpha: true})
 renderer.setClearColor( 0xffffff, 0 );
@@ -52657,7 +52678,6 @@ const cameraControls = new three_examples_jsm_controls_TrackballControls_js__WEB
 cameraControls.rotateSpeed = 1.0;
 cameraControls.zoomSpeed = 1.2;
 cameraControls.panSpeed = 0.8;
-
 cameraControls.staticMoving = true;
 cameraControls.dynamicDampingFactor = 0.3;
 
@@ -52675,14 +52695,26 @@ scene.add( directionalLight );
 // gear controls
 let gears = new Set();
 let gear = new _gear__WEBPACK_IMPORTED_MODULE_2__["Gear"](17, gearControls.system_mod);
+let gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
+
 gear.addToScene(scene);
 gears.add(gear);
 
+// gears.addGear copies invariant parameters to new gears for us:
 gear = gear.addGear(15, 1);
+gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
+
 gear.addToScene(scene);
 gears.add(gear);
 
 gear = gear.addGear(19, Math.PI/2);
+gearGui = gui.addFolder(`gear ${gears.size}`);
+gearGui.add(gear, 'teeth', 10, 30);
+gearGui.add(gear, 'angle', 0, 2 * Math.PI)
 gear.addToScene(scene);
 gears.add(gear);
 
