@@ -8,7 +8,7 @@ const sin = Math.sin;
 const sqrt = Math.sqrt;
 const atan2 = Math.atan2;
 
-const COLOURS = [
+const COLORS = [
 	0x96a365,
 	0x93a35a,
 	0x9ae2f0,
@@ -172,11 +172,11 @@ export class Gear {
 		this.teeth = teeth;
 		this.mod = mod;
 
+		this.color = choose(COLORS);
+
 		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
 		this.mesh = this.createGeometry(this.parameters);
-		
-		
-		// this.pinion = pinion;
+
 
 		// defaults:
 		this.angle = 0;
@@ -223,7 +223,7 @@ export class Gear {
 			bevelEnabled: false
 		});		
 		this.material = new THREE.MeshLambertMaterial({
-			color: choose(COLOURS),
+			color: this.color,
 			// color: Math.random() * 0x0fffff,
 			opacity: 1 });
 		this.mesh = new THREE.Mesh( this.geometry, this.material );

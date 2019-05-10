@@ -52345,7 +52345,7 @@ const sin = Math.sin;
 const sqrt = Math.sqrt;
 const atan2 = Math.atan2;
 
-const COLOURS = [
+const COLORS = [
 	0x96a365,
 	0x93a35a,
 	0x9ae2f0,
@@ -52509,11 +52509,11 @@ class Gear {
 		this.teeth = teeth;
 		this.mod = mod;
 
+		this.color = choose(COLORS);
+
 		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
 		this.mesh = this.createGeometry(this.parameters);
-		
-		
-		// this.pinion = pinion;
+
 
 		// defaults:
 		this.angle = 0;
@@ -52560,7 +52560,7 @@ class Gear {
 			bevelEnabled: false
 		});		
 		this.material = new three__WEBPACK_IMPORTED_MODULE_0__["MeshLambertMaterial"]({
-			color: choose(COLOURS),
+			color: this.color,
 			// color: Math.random() * 0x0fffff,
 			opacity: 1 });
 		this.mesh = new three__WEBPACK_IMPORTED_MODULE_0__["Mesh"]( this.geometry, this.material );
@@ -52663,30 +52663,29 @@ const camera = new three__WEBPACK_IMPORTED_MODULE_0__["PerspectiveCamera"](
 	0.1,
 	1000 )
 
-
 const systemGui = new dat_gui__WEBPACK_IMPORTED_MODULE_3__["GUI"]();
 
-const GEARS = new Set();
+const gears = new Set();
 
 function addGui(gear, label) {
 	let gui = systemGui.addFolder(label);
 	const obj = {
 		changeAngle: function(value) {
-			GEARS.forEach( g => g.rotation = 0 );
+			gears.forEach( g => g.rotation = 0 );
 			gear.angle = Object(_gear__WEBPACK_IMPORTED_MODULE_2__["degToRad"])(value);
-			GEARS.forEach( g => {
+			gears.forEach( g => {
 				g.positionGear();
 				g.rotateGear();
 			});
 
 		},
 		changeTeeth: function(teeth) {
-			GEARS.forEach( g => g.rotation = 0 );
+			gears.forEach( g => g.rotation = 0 );
 			gear.teeth = teeth;
 			scene.remove(gear.mesh);
 			scene.add(gear.reset());
 
-			GEARS.forEach( g => {
+			gears.forEach( g => {
 				g.calculateRatio();
 				g.positionGear();
 				g.rotateGear();
@@ -52709,8 +52708,8 @@ const gearControls = {
 	system_mod: 2.1,
 	addGear: function() {
 		let newgear;
-		if (GEARS.size > 0) {
-			const lastGear = [...GEARS].pop();
+		if (gears.size > 0) {
+			const lastGear = [...gears].pop();
 			// link new gear to last gear:
 			newgear = lastGear.addGear(
 				Math.floor(Math.random() * 10 + 11),
@@ -52721,12 +52720,12 @@ const gearControls = {
 				Math.floor(Math.random() * 10 + 11),
 				this.system_mod);
 		}
-		addGui(newgear, `gear ${GEARS.size}`)
+		addGui(newgear, `gear ${gears.size}`)
 		newgear.addToScene(scene);
-		GEARS.add(newgear);
+		gears.add(newgear);
 	},
 	changeMod: function(value) {
-		GEARS.forEach( gear => {
+		gears.forEach( gear => {
 			gear.rotation = 0;
 			gear.mod = value;
 			scene.remove(gear.mesh);
@@ -52786,7 +52785,7 @@ for (var i = 0; i < 5; i++) {
 function animate() {
 	requestAnimationFrame( animate )
 
-	GEARS.forEach((gear, i) => {
+	gears.forEach((gear, i) => {
 		gear.driveBy(gearControls.speed);
 	})
 

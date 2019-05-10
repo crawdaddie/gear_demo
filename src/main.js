@@ -12,30 +12,29 @@ const camera = new THREE.PerspectiveCamera(
 	0.1,
 	1000 )
 
-
 const systemGui = new dat.GUI();
 
-const GEARS = new Set();
+const gears = new Set();
 
 function addGui(gear, label) {
 	let gui = systemGui.addFolder(label);
 	const obj = {
 		changeAngle: function(value) {
-			GEARS.forEach( g => g.rotation = 0 );
+			gears.forEach( g => g.rotation = 0 );
 			gear.angle = degToRad(value);
-			GEARS.forEach( g => {
+			gears.forEach( g => {
 				g.positionGear();
 				g.rotateGear();
 			});
 
 		},
 		changeTeeth: function(teeth) {
-			GEARS.forEach( g => g.rotation = 0 );
+			gears.forEach( g => g.rotation = 0 );
 			gear.teeth = teeth;
 			scene.remove(gear.mesh);
 			scene.add(gear.reset());
 
-			GEARS.forEach( g => {
+			gears.forEach( g => {
 				g.calculateRatio();
 				g.positionGear();
 				g.rotateGear();
@@ -58,8 +57,8 @@ const gearControls = {
 	system_mod: 2.1,
 	addGear: function() {
 		let newgear;
-		if (GEARS.size > 0) {
-			const lastGear = [...GEARS].pop();
+		if (gears.size > 0) {
+			const lastGear = [...gears].pop();
 			// link new gear to last gear:
 			newgear = lastGear.addGear(
 				Math.floor(Math.random() * 10 + 11),
@@ -70,12 +69,12 @@ const gearControls = {
 				Math.floor(Math.random() * 10 + 11),
 				this.system_mod);
 		}
-		addGui(newgear, `gear ${GEARS.size}`)
+		addGui(newgear, `gear ${gears.size}`)
 		newgear.addToScene(scene);
-		GEARS.add(newgear);
+		gears.add(newgear);
 	},
 	changeMod: function(value) {
-		GEARS.forEach( gear => {
+		gears.forEach( gear => {
 			gear.rotation = 0;
 			gear.mod = value;
 			scene.remove(gear.mesh);
@@ -135,7 +134,7 @@ for (var i = 0; i < 5; i++) {
 function animate() {
 	requestAnimationFrame( animate )
 
-	GEARS.forEach((gear, i) => {
+	gears.forEach((gear, i) => {
 		gear.driveBy(gearControls.speed);
 	})
 
