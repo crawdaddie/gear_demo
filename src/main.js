@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
 
-import { Gear } from "./gear";
+import { Gear, degToRad, radToDeg } from "./gear";
 
 import * as dat from "dat.gui";
 
@@ -12,22 +12,92 @@ const camera = new THREE.PerspectiveCamera(
 	0.1,
 	1000 )
 
-// dat.gui controls
-const GearControls = function() {
-	this.speed = 0.01;
-	this.system_mod = 2.1;
+
+const systemGui = new dat.GUI();
+
+const GEARS = new Set();
+
+function addGui(gear, label) {
+	let gui = systemGui.addFolder(label);
+	const obj = {
+		changeAngle: function(value) {
+			GEARS.forEach( g => g.rotation = 0 );
+			gear.angle = degToRad(value);
+			GEARS.forEach( g => {
+				g.positionGear();
+				g.rotateGear();
+			});
+
+		},
+		changeTeeth: function(teeth) {
+			GEARS.forEach( g => g.rotation = 0 );
+			gear.teeth = teeth;
+			scene.remove(gear.mesh);
+			scene.add(gear.reset());
+
+			GEARS.forEach( g => {
+				g.calculateRatio();
+				g.positionGear();
+				g.rotateGear();
+			})
+		},
+		angle: radToDeg(gear.angle),
+		teeth: gear.teeth
+	}
+	gui.add(obj, 'teeth', 10, 30, 1)
+		.onFinishChange(obj.changeTeeth);
+
+	gui.add(obj, 'angle', -180, 180)
+		.onFinishChange(obj.changeAngle);
+
+	return gui;
 };
 
-const gearControls = new GearControls();
+const gearControls = {
+	speed: 0.005,
+	system_mod: 2.1,
+	addGear: function() {
+		let newgear;
+		if (GEARS.size > 0) {
+			const lastGear = [...GEARS].pop();
+			// link new gear to last gear:
+			newgear = lastGear.addGear(
+				Math.floor(Math.random() * 10 + 11),
+				Math.random() * Math.PI - Math.PI/2 );
+		} else {
+			// create new gear
+			newgear = new Gear(
+				Math.floor(Math.random() * 10 + 11),
+				this.system_mod);
+		}
+		addGui(newgear, `gear ${GEARS.size}`)
+		newgear.addToScene(scene);
+		GEARS.add(newgear);
+	},
+	changeMod: function(value) {
+		GEARS.forEach( gear => {
+			gear.rotation = 0;
+			gear.mod = value;
+			scene.remove(gear.mesh);
+			scene.add(gear.reset());
+			gear.calculateRatio();
+			gear.positionGear();
+			gear.rotateGear();
+		});
+	}
+};
 
-const gui = new dat.GUI();
-gui.add(gearControls, 'speed', -0.1, 0.1);
-gui.add(gearControls, 'system_mod', 1, 3.0);
 
+systemGui.add(gearControls, 'addGear');
+systemGui.add(gearControls, 'speed', -0.1, 0.1);
+systemGui.add(gearControls, 'system_mod', 1, 3.0)
+	.onFinishChange(gearControls.changeMod);
+
+systemGui.closed = true;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true})
 renderer.setClearColor( 0xffffff, 0 );
-camera.position.z = 30;
+camera.position.z = 40;
 
 // canvas stuff
 renderer.setSize( window.innerWidth, window.innerHeight );
@@ -57,40 +127,15 @@ directionalLight.castShadow = true;
 scene.add( directionalLight );
 
 
-// gears
-// mod = pitch circle diameter / teeth
-// for two gears to mesh the mod must be the same, so we use global system mod from 
-// gear controls
-let gears = new Set();
-let gear = new Gear(17, gearControls.system_mod);
-let gearGui = gui.addFolder(`gear ${gears.size}`);
-gearGui.add(gear, 'teeth', 10, 30);
-gearGui.add(gear, 'angle', 0, 2 * Math.PI)
-
-gear.addToScene(scene);
-gears.add(gear);
-
-// gears.addGear copies invariant parameters to new gears for us:
-gear = gear.addGear(15, 1);
-gearGui = gui.addFolder(`gear ${gears.size}`);
-gearGui.add(gear, 'teeth', 10, 30);
-gearGui.add(gear, 'angle', 0, 2 * Math.PI)
-
-gear.addToScene(scene);
-gears.add(gear);
-
-gear = gear.addGear(19, Math.PI/2);
-gearGui = gui.addFolder(`gear ${gears.size}`);
-gearGui.add(gear, 'teeth', 10, 30);
-gearGui.add(gear, 'angle', 0, 2 * Math.PI)
-gear.addToScene(scene);
-gears.add(gear);
-
+for (var i = 0; i < 5; i++) {
+	// add 5 random gears
+	gearControls.addGear()
+}
 
 function animate() {
 	requestAnimationFrame( animate )
 
-	gears.forEach((gear, i) => {
+	GEARS.forEach((gear, i) => {
 		gear.driveBy(gearControls.speed);
 	})
 

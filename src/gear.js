@@ -46,10 +46,13 @@ function polToCar(r, w) {
 	}
 }
 
-function degToRad(angle) {
+export function degToRad(angle) {
 	return angle * PI / 180;
 }
 
+export function radToDeg(angle) {
+	return 180 * angle / PI;
+}
 
 function involutePoint(t, baseRadius) {
 	return new THREE.Vector2(
@@ -114,7 +117,8 @@ function generateGearSegment(pitchAngle, baseRadius, maxRadius, minRadius, alpha
 	pt = polToCar(minRadius, pitchAngle)
 	segmentShape.lineTo(pt.x, pt.y);
 	segmentShape.lineTo(0,0);
-	return segmentShape;
+	segmentShape.points
+	return rotateShape(segmentShape, -1 * alpha);
 }
 
 function generateGearShapeFromParams(params) {
@@ -138,6 +142,7 @@ function generateGearParams(teeth, mod, pressureAngleDeg) {
 	const alpha = (sqrt(pitchCircleRadius**2 - baseCircleRadius**2) / baseCircleRadius) - pressureAngle;
 	return {
 		pressureAngle: pressureAngle,
+		pressureAngleDeg: pressureAngleDeg,
 		pitchAngle: pitchAngle,
 		pitchCircleRadius: pitchCircleRadius,
 		baseCircleRadius: baseCircleRadius,
@@ -151,41 +156,50 @@ function generateGearParams(teeth, mod, pressureAngleDeg) {
 	}
 }
 
+function positionChildGears(gear, offsetX, offsetY) {
+	if (gear.childGears) {	
+		gear.childGears.forEach(cg => {
+			cg.setPosition(cg.x + offsetX, cg.y + offsetY);
+			positionChildGears(cg, offsetX, offsetY)
+		})
+	}
+}
+
 export class Gear {
 
-	constructor(teeth, mod = 3, pressureAngleDeg = 20, x = 0, y = 0, pinion) {
-		const gearParams = generateGearParams(teeth, mod, pressureAngleDeg);
-		const shape = generateGearShapeFromParams(gearParams);
-
-		this.parameters = gearParams;
-		this.mesh = this.createGeometry(shape);
-
-
-		this.x = x;
-		this.y = y;
-
-		this.mesh.position.x = x;
-		this.mesh.position.y = y;
-
+	constructor(teeth, mod = 3, pressureAngleDeg = 20, pinion) {
+		
 		this.teeth = teeth;
 		this.mod = mod;
+
+		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
+		this.mesh = this.createGeometry(this.parameters);
 		
-		this.pinion = pinion;
+		
+		// this.pinion = pinion;
+
+		// defaults:
 		this.angle = 0;
+		this.x = 0;
+		this.y = 0;
 
-
-		// associative array for storing linked gears by their relative angle:
-		this.linkedGears = {};
-
+		this.childGears = new Set();
 
 		if (pinion) {
-			this.ratio = pinion.teeth / this.teeth;
-			this.rotationSpeed = -1 * pinion.rotationSpeed * this.ratio;
-			// this.driveBy(pinion.rotation * this.parameters.pitchAngle / 2)
-		} else {
-			this.ratio = 1;
-			this.rotationSpeed = 1;
+			this.pinion = pinion;
 		}
+
+		this.calculateRatio()
+
+	}
+
+	reset() {
+		this.parameters = generateGearParams(this.teeth, this.mod, this.parameters.pressureAngleDeg);
+		this.geometry.dispose();
+		this.material.dispose();
+		// this.mesh.dispose();
+
+		return this.createGeometry(this.parameters);
 	}
 
 	get rotation() {
@@ -196,40 +210,24 @@ export class Gear {
 		this.mesh.rotation.z = rot;
 	}
 
-	// // public gui params
-	// get numTeeth() {
-	// 	return this.teeth
-	// }
-
-	// set numTeeth(teeth) {
-	// 	console.log(`setting teeth ${teeth}`);
-	// 	return teeth
-	// }
-
-	// get relativeAngle() {
-	// 	return this.angle
-	// }
-
-	// set relativeAngle(angle) {
-	// 	// set angle of gear relative to pinion
-	// 	console.log(`setting angle ${angle}`);
-	// 	return angle
-	// }
-
 	driveBy(angle) {
+		// rotate this gear as if it was being driven
+		// by its parent turning by an angle
 		this.rotation += angle * this.rotationSpeed;
-		// console.log(this.rotation);
 	}
 
-	createGeometry(shape) {
-		const geometry = new THREE.ExtrudeBufferGeometry(shape, {
+	createGeometry(parameters) {
+		const shape = generateGearShapeFromParams(parameters);
+		this.geometry = new THREE.ExtrudeBufferGeometry(shape, {
 			depth: 2,
 			bevelEnabled: false
 		});		
-		const material = new THREE.MeshLambertMaterial({
+		this.material = new THREE.MeshLambertMaterial({
 			color: choose(COLOURS),
+			// color: Math.random() * 0x0fffff,
 			opacity: 1 });
-		return new THREE.Mesh( geometry, material );
+		this.mesh = new THREE.Mesh( this.geometry, this.material );
+		return this.mesh;
 	}
 
 	addToScene(scene) {
@@ -238,42 +236,61 @@ export class Gear {
 	}
 
 	setPosition(x, y) {
+		this.x = x;
+		this.y = y;
 		this.mesh.position.x = x;
 		this.mesh.position.y = y;	
 	}
 
+	calculateRatio() {
+		if (this.pinion) {
+			this.ratio = this.pinion.teeth / this.teeth;
+			this.rotationSpeed = -1 * this.pinion.rotationSpeed * this.ratio;
+		} else {
+			this.ratio = 1;
+			this.rotationSpeed = 1;
+		}
+	}
+
+	positionGear() {
+		// position this gear relative to its pinion
+		if (this.pinion) {
+			// euclidean distance between centre of this gear and added gear:
+			const centreDistance = (this.mod * this.teeth + this.mod * this.pinion.teeth) / 2;
+			const offsetX = centreDistance * cos(this.angle);
+			const offsetY = centreDistance * sin(this.angle);
+			this.setPosition(
+				this.pinion.x + offsetX,
+				this.pinion.y + offsetY
+				);
+			// positionChildGears(this, offsetX, offsetY)
+		}
+	}
+
+	rotateGear() {
+		if (this.pinion) {
+			// rotate this gear and pretend to rotate pinion so
+			// their 'first teeth' touch and mesh together 
+			// since pinion is really at a different position
+			// we must use that position to drive this gear around
+			// as if they were always meshed together 
+			this.rotation += PI + this.angle;
+			this.rotation += (this.angle - this.pinion.rotation) * this.ratio;
+		}
+	}
+
 	addGear(teeth, angle) {
-		// euclidean distance between centre of this gear and added gear:
-		const centreDistance = this.mod * this.teeth / 2 + this.mod * teeth / 2;
-		const newGearX = this.x + centreDistance * cos(angle);
-		const newGearY = this.y + centreDistance * sin(angle);
 		const newGear = new this.constructor(teeth, this.mod,
-			180 * this.parameters.pressureAngle / PI,
-			newGearX, newGearY,	this // keep reference to this gear as pinion of new gear
-			);
-		
-		// store linked gear by relative angle
-		this.linkedGears[angle] = newGear;
+			this.parameters.pressureAngleDeg,
+			this // keep reference to this gear as pinion of new gear
+		);
 
-		
+		this.childGears.add(newGear);
 
-		// newGear.rotation += PI + angle - newGear.parameters.alpha;
-		// // correct new gear's rotation based on current rotation
-		// newGear.driveBy(this.parameters.alpha - angle);
 		newGear.angle = angle;
-		const currentRotation = this.rotation;
-
-		this.rotation += angle - currentRotation - this.parameters.alpha;
-
-		newGear.rotation += PI + angle - newGear.parameters.alpha;
-		newGear.driveBy(this.parameters.alpha - angle);
-
-		this.rotation += currentRotation + this.parameters.alpha - angle;
-		
-		// newGear.driveBy(currentRotation + this.parameters.alpha - angle)
-		// newGear.rotation += newGear.parameters.alpha;
-
-
+		newGear.positionGear();
+		newGear.rotateGear();
+				
 		return newGear;
 	}
 }
