@@ -1,12 +1,10 @@
 import * as THREE from "three";
 
-const INVOLUTE_STEP = 0.05;
-const ORIGIN_VEC2 = new THREE.Vector2(0, 0);
-const PI = Math.PI;
-const cos = Math.cos;
-const sin = Math.sin;
-const sqrt = Math.sqrt;
-const atan2 = Math.atan2;
+import {
+	PI, cos, sin, sqrt, atan2, randChoose, randInt, randFLoat, carToPol, polToCar, degToRad, radToDeg,
+	involutePoint, generateInvoluteCurve,
+	rotateVec2Array, reflectVec2Array, rotateShape
+} from "./math";
 
 const COLORS = [
 	0x96a365,
@@ -23,81 +21,6 @@ const COLORS = [
 	0xc73a4a,
 	0xdc4530
 ]
-
-function choose(array) {
-	const index = Math.floor(Math.random() * array.length);
-	return array[index];
-}
-
-// math conversion utils
-function carToPol(x, y) {
-	// returns r / 'radius' (distance to origin)
-	// and w (angle from x axis - in RADIANS!!)
-	return {
-		r: Math.sqrt(x*x + y*y),
-		w: Math.atan2(y,x)
-	}
-}
-
-function polToCar(r, w) {
-	return {
-		x: r * cos(w),
-		y: r * sin(w)
-	}
-}
-
-export function degToRad(angle) {
-	return angle * PI / 180;
-}
-
-export function radToDeg(angle) {
-	return 180 * angle / PI;
-}
-
-function involutePoint(t, baseRadius) {
-	return new THREE.Vector2(
-		baseRadius * (cos(t) + t * sin(t)),
-		baseRadius * (sin(t) - t * cos(t))
-	)	
-}
-
-function generateInvoluteCurve(baseRadius, maxRadius, step = INVOLUTE_STEP) {
-	const endPointParam = sqrt((maxRadius ** 2 / baseRadius ** 2) - 1 );
-	let pointsArray = [];
-	let t = 0;
-	let point = involutePoint(t, baseRadius);
-	while ( point.length() < maxRadius) {
-		point = involutePoint(t, baseRadius);
-		pointsArray.push(point);
-		t += step;
-	};
-
-	point = involutePoint(endPointParam, baseRadius);
-	pointsArray.push(point);
-	return pointsArray;
-}
-
-function rotateVec2Array(array, angle, origin = ORIGIN_VEC2) {
-	return array.map(vec => vec.rotateAround(origin, angle)) 
-}
-
-function rotateShape(shape, rotationAngle) {
-	if (rotationAngle % (2 * PI) == 0) {
-		return shape
-	} else {
-		return new THREE.Shape(rotateVec2Array(shape.getPoints(), rotationAngle));
-	}
-}
-
-function reflectVec2Array(array, angle) {
-	// reflect array of vec2 in ray which makes angle with x-axis
-	return array.map((vec) => {
-		return new THREE.Vector2(
-			cos(2 * angle) * vec.x + sin(2 * angle) * vec.y,
-			sin(2 * angle) * vec.x - cos(2 * angle) * vec.y	
-		)
-	})
-}
 
 function generateGearSegment(pitchAngle, baseRadius, maxRadius, minRadius, alpha) {
 	
@@ -156,14 +79,6 @@ function generateGearParams(teeth, mod, pressureAngleDeg) {
 	}
 }
 
-function positionChildGears(gear, offsetX, offsetY) {
-	if (gear.childGears) {	
-		gear.childGears.forEach(cg => {
-			cg.setPosition(cg.x + offsetX, cg.y + offsetY);
-			positionChildGears(cg, offsetX, offsetY)
-		})
-	}
-}
 
 export class Gear {
 
@@ -171,8 +86,9 @@ export class Gear {
 		
 		this.teeth = teeth;
 		this.mod = mod;
+		// this.pressureAngle
 
-		this.color = choose(COLORS);
+		this.color = randChoose(COLORS);
 
 		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
 		this.mesh = this.createGeometry(this.parameters);
@@ -206,13 +122,13 @@ export class Gear {
 		return this.mesh.rotation.z
 	}
 
-	set rotation(rot) {
-		this.mesh.rotation.z = rot;
+	set rotation(angle) {
+		this.mesh.rotation.z = angle;
 	}
 
 	driveBy(angle) {
 		// rotate this gear as if it was being driven
-		// by its parent turning by an angle
+		// by the first gear in the drivetrain turning by an angle
 		this.rotation += angle * this.rotationSpeed;
 	}
 
@@ -250,6 +166,7 @@ export class Gear {
 			this.ratio = 1;
 			this.rotationSpeed = 1;
 		}
+		return this
 	}
 
 	positionGear() {
@@ -263,8 +180,8 @@ export class Gear {
 				this.pinion.x + offsetX,
 				this.pinion.y + offsetY
 				);
-			// positionChildGears(this, offsetX, offsetY)
 		}
+		return this
 	}
 
 	rotateGear() {
@@ -277,10 +194,13 @@ export class Gear {
 			this.rotation += PI + this.angle;
 			this.rotation += (this.angle - this.pinion.rotation) * this.ratio;
 		}
+		return this
 	}
 
 	addGear(teeth, angle) {
-		const newGear = new this.constructor(teeth, this.mod,
+		const newGear = new this.constructor(
+			teeth,
+			this.mod,
 			this.parameters.pressureAngleDeg,
 			this // keep reference to this gear as pinion of new gear
 		);
@@ -292,6 +212,18 @@ export class Gear {
 		newGear.rotateGear();
 				
 		return newGear;
+	}
+
+	remove() {
+		this.geometry.dispose();
+		this.material.dispose();
+		if (this.pinion) {
+			const pinion = this.pinion;
+			this.childGears.forEach( g => {
+				g.pinion = pinion;
+				pinion.childGears.add(g);
+			});
+		} 
 	}
 }
 

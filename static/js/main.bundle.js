@@ -52326,24 +52326,17 @@ TrackballControls.prototype.constructor = TrackballControls;
 /*!*********************!*\
   !*** ./src/gear.js ***!
   \*********************/
-/*! exports provided: degToRad, radToDeg, Gear */
+/*! exports provided: Gear */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "degToRad", function() { return degToRad; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "radToDeg", function() { return radToDeg; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Gear", function() { return Gear; });
 /* harmony import */ var three__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! three */ "./node_modules/three/build/three.module.js");
+/* harmony import */ var _math__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./math */ "./src/math.js");
 
 
-const INVOLUTE_STEP = 0.05;
-const ORIGIN_VEC2 = new three__WEBPACK_IMPORTED_MODULE_0__["Vector2"](0, 0);
-const PI = Math.PI;
-const cos = Math.cos;
-const sin = Math.sin;
-const sqrt = Math.sqrt;
-const atan2 = Math.atan2;
+
 
 const COLORS = [
 	0x96a365,
@@ -52361,9 +52354,466 @@ const COLORS = [
 	0xdc4530
 ]
 
-function choose(array) {
+function generateGearSegment(pitchAngle, baseRadius, maxRadius, minRadius, alpha) {
+	
+	const involutePoints1 = Object(_math__WEBPACK_IMPORTED_MODULE_1__["generateInvoluteCurve"])(baseRadius, maxRadius);
+	// const involutePoints2 = reflectVec2Array(involutePoints1, 1.045 * pitchAngle / 4);
+	const involutePoints2 = Object(_math__WEBPACK_IMPORTED_MODULE_1__["reflectVec2Array"])(involutePoints1, pitchAngle / 4 + alpha);
+	
+	const involuteToothProfile = involutePoints1.concat(involutePoints2.reverse());
+
+	const segmentShape = new three__WEBPACK_IMPORTED_MODULE_0__["Shape"]();
+	segmentShape.moveTo(baseRadius, 0);
+	segmentShape.setFromPoints(involuteToothProfile);
+	// TODO: add circular cutout
+	let pt = Object(_math__WEBPACK_IMPORTED_MODULE_1__["polToCar"])(minRadius, pitchAngle * 0.5 + 2 * alpha);
+	segmentShape.lineTo(pt.x, pt.y);
+
+	pt = Object(_math__WEBPACK_IMPORTED_MODULE_1__["polToCar"])(minRadius, pitchAngle)
+	segmentShape.lineTo(pt.x, pt.y);
+	segmentShape.lineTo(0,0);
+	segmentShape.points
+	return Object(_math__WEBPACK_IMPORTED_MODULE_1__["rotateShape"])(segmentShape, -1 * alpha);
+}
+
+function generateGearShapeFromParams(params) {
+	const segment = generateGearSegment(params.pitchAngle, params.baseCircleRadius, params.maxRadius, params.minRadius, params.alpha);
+	let segments = [];
+	for (var i = 0; i < params.teeth; i++) {
+		segments.push(Object(_math__WEBPACK_IMPORTED_MODULE_1__["rotateShape"])(segment, i * params.pitchAngle))
+	}
+	return segments
+}
+
+function generateGearParams(teeth, mod, pressureAngleDeg) {
+	const pressureAngle = Object(_math__WEBPACK_IMPORTED_MODULE_1__["degToRad"])(pressureAngleDeg);
+	const pitchAngle = 2 * _math__WEBPACK_IMPORTED_MODULE_1__["PI"] / teeth;
+	const pitchCircleRadius = mod * teeth / 2;
+	const baseCircleRadius = pitchCircleRadius * Object(_math__WEBPACK_IMPORTED_MODULE_1__["cos"])(pressureAngle);
+	const addendum = mod;
+	const dedendum = 1.2 * mod;
+	const maxRadius = pitchCircleRadius + addendum;
+	const minRadius = pitchCircleRadius - dedendum;
+	const alpha = (Object(_math__WEBPACK_IMPORTED_MODULE_1__["sqrt"])(pitchCircleRadius**2 - baseCircleRadius**2) / baseCircleRadius) - pressureAngle;
+	return {
+		pressureAngle: pressureAngle,
+		pressureAngleDeg: pressureAngleDeg,
+		pitchAngle: pitchAngle,
+		pitchCircleRadius: pitchCircleRadius,
+		baseCircleRadius: baseCircleRadius,
+		addendum: addendum,
+		dedendum: dedendum,
+		maxRadius: maxRadius,
+		minRadius: minRadius,
+		alpha: alpha,
+		teeth: teeth,
+		mod: mod
+	}
+}
+
+
+class Gear {
+
+	constructor(teeth, mod = 3, pressureAngleDeg = 20, pinion) {
+		
+		this.teeth = teeth;
+		this.mod = mod;
+		// this.pressureAngle
+
+		this.color = Object(_math__WEBPACK_IMPORTED_MODULE_1__["randChoose"])(COLORS);
+
+		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
+		this.mesh = this.createGeometry(this.parameters);
+
+
+		// defaults:
+		this.angle = 0;
+		this.x = 0;
+		this.y = 0;
+
+		this.childGears = new Set();
+
+		if (pinion) {
+			this.pinion = pinion;
+		}
+
+		this.calculateRatio()
+
+	}
+
+	reset() {
+		this.parameters = generateGearParams(this.teeth, this.mod, this.parameters.pressureAngleDeg);
+		this.geometry.dispose();
+		this.material.dispose();
+		// this.mesh.dispose();
+
+		return this.createGeometry(this.parameters);
+	}
+
+	get rotation() {
+		return this.mesh.rotation.z
+	}
+
+	set rotation(angle) {
+		this.mesh.rotation.z = angle;
+	}
+
+	driveBy(angle) {
+		// rotate this gear as if it was being driven
+		// by the first gear in the drivetrain turning by an angle
+		this.rotation += angle * this.rotationSpeed;
+	}
+
+	createGeometry(parameters) {
+		const shape = generateGearShapeFromParams(parameters);
+		this.geometry = new three__WEBPACK_IMPORTED_MODULE_0__["ExtrudeBufferGeometry"](shape, {
+			depth: 2,
+			bevelEnabled: false
+		});		
+		this.material = new three__WEBPACK_IMPORTED_MODULE_0__["MeshLambertMaterial"]({
+			color: this.color,
+			// color: Math.random() * 0x0fffff,
+			opacity: 1 });
+		this.mesh = new three__WEBPACK_IMPORTED_MODULE_0__["Mesh"]( this.geometry, this.material );
+		return this.mesh;
+	}
+
+	addToScene(scene) {
+		scene.add(this.mesh);
+		return this
+	}
+
+	setPosition(x, y) {
+		this.x = x;
+		this.y = y;
+		this.mesh.position.x = x;
+		this.mesh.position.y = y;	
+	}
+
+	calculateRatio() {
+		if (this.pinion) {
+			this.ratio = this.pinion.teeth / this.teeth;
+			this.rotationSpeed = -1 * this.pinion.rotationSpeed * this.ratio;
+		} else {
+			this.ratio = 1;
+			this.rotationSpeed = 1;
+		}
+		return this
+	}
+
+	positionGear() {
+		// position this gear relative to its pinion
+		if (this.pinion) {
+			// euclidean distance between centre of this gear and added gear:
+			const centreDistance = (this.mod * this.teeth + this.mod * this.pinion.teeth) / 2;
+			const offsetX = centreDistance * Object(_math__WEBPACK_IMPORTED_MODULE_1__["cos"])(this.angle);
+			const offsetY = centreDistance * Object(_math__WEBPACK_IMPORTED_MODULE_1__["sin"])(this.angle);
+			this.setPosition(
+				this.pinion.x + offsetX,
+				this.pinion.y + offsetY
+				);
+		}
+		return this
+	}
+
+	rotateGear() {
+		if (this.pinion) {
+			// rotate this gear and pretend to rotate pinion so
+			// their 'first teeth' touch and mesh together 
+			// since pinion is really at a different position
+			// we must use that position to drive this gear around
+			// as if they were always meshed together 
+			this.rotation += _math__WEBPACK_IMPORTED_MODULE_1__["PI"] + this.angle;
+			this.rotation += (this.angle - this.pinion.rotation) * this.ratio;
+		}
+		return this
+	}
+
+	addGear(teeth, angle) {
+		const newGear = new this.constructor(
+			teeth,
+			this.mod,
+			this.parameters.pressureAngleDeg,
+			this // keep reference to this gear as pinion of new gear
+		);
+
+		this.childGears.add(newGear);
+
+		newGear.angle = angle;
+		newGear.positionGear();
+		newGear.rotateGear();
+				
+		return newGear;
+	}
+
+	remove() {
+		this.geometry.dispose();
+		this.material.dispose();
+		if (this.pinion) {
+			const pinion = this.pinion;
+			this.childGears.forEach( g => {
+				g.pinion = pinion;
+				pinion.childGears.add(g);
+			});
+		} 
+	}
+}
+
+
+
+/***/ }),
+
+/***/ "./src/gui.js":
+/*!********************!*\
+  !*** ./src/gui.js ***!
+  \********************/
+/*! exports provided: removeFolder, addSystemGui, addGearGui */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "removeFolder", function() { return removeFolder; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addSystemGui", function() { return addSystemGui; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "addGearGui", function() { return addGearGui; });
+/* harmony import */ var dat_gui__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! dat.gui */ "./node_modules/dat.gui/build/dat.gui.module.js");
+
+
+function removeFolder(parent, childFolder) {
+	let newFolders = {};
+	let i = 0;
+	let folder;
+	parent.removeFolder(childFolder);
+	for (var key in parent.__folders) {
+		folder = parent.__folders[key];
+		folder.name = `gear ${i}`;
+		newFolders[`gear ${i}`] = folder;
+		i++;
+	};
+	parent.__folders = newFolders;
+}
+
+function addSystemGui(obj, gui) {
+	gui.add(obj, 'addGear');
+	gui.add(obj, 'speed', -0.1, 0.1);
+	gui.add(obj, 'system_mod', 1, 3.0);
+	gui.onFinishChange(obj.changeMod);
+	gui.closed = true;
+	return gui;
+}
+
+function addGearGui(obj, parent, label) {
+	let gui = parent.addFolder(label);
+	gui.add(obj, 'teeth', 10, 30, 1)
+		.onFinishChange(obj.changeTeeth);
+
+	gui.add(obj, 'angle', -180, 180)
+		.onFinishChange(obj.changeAngle);
+
+	gui.add(obj, 'removeGear');
+
+	return gui;
+};
+
+
+/***/ }),
+
+/***/ "./src/main.js":
+/*!*********************!*\
+  !*** ./src/main.js ***!
+  \*********************/
+/*! no exports provided */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var three__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! three */ "./node_modules/three/build/three.module.js");
+/* harmony import */ var three_examples_jsm_controls_TrackballControls_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! three/examples/jsm/controls/TrackballControls.js */ "./node_modules/three/examples/jsm/controls/TrackballControls.js");
+/* harmony import */ var _gear__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./gear */ "./src/gear.js");
+/* harmony import */ var _math__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./math */ "./src/math.js");
+/* harmony import */ var _gui__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./gui */ "./src/gui.js");
+/* harmony import */ var dat_gui__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! dat.gui */ "./node_modules/dat.gui/build/dat.gui.module.js");
+
+
+
+
+
+
+
+
+
+
+const scene = new three__WEBPACK_IMPORTED_MODULE_0__["Scene"]()
+const camera = new three__WEBPACK_IMPORTED_MODULE_0__["PerspectiveCamera"](
+	75,
+	window.innerWidth / window.innerHeight,
+	0.1,
+	1000 )
+
+
+const gears = new Set();
+let gui = new dat_gui__WEBPACK_IMPORTED_MODULE_5__["GUI"]();
+
+const gearControls = {
+	speed: 0.005,
+	system_mod: 2.1,
+	addGear: function() {
+		let gear;
+		let gui;
+		if (gears.size > 0) {
+			const lastGear = [...gears].pop();
+			// link new gear to last gear:
+			gear = lastGear.addGear(
+				Object(_math__WEBPACK_IMPORTED_MODULE_3__["randInt"])(11, 30),
+				Object(_math__WEBPACK_IMPORTED_MODULE_3__["randFloat"])(-1 * Math.PI/2, Math.PI/2 )
+				);
+		} else {
+			// create new gear
+			gear = new _gear__WEBPACK_IMPORTED_MODULE_2__["Gear"](
+				Object(_math__WEBPACK_IMPORTED_MODULE_3__["randInt"])(11, 30),
+				this.system_mod);
+		};
+		const obj = {
+			changeAngle: function(value) {
+				gears.forEach( g => g.rotation = 0 );
+				gear.angle = Object(_math__WEBPACK_IMPORTED_MODULE_3__["degToRad"])(value);
+				// ratio unchanged
+				gears.forEach( g => g.positionGear().rotateGear());
+			},
+			changeTeeth: function(teeth) {
+				gears.forEach( g => g.rotation = 0 );
+				gear.teeth = teeth;
+				scene.remove(gear.mesh);
+				scene.add(gear.reset());
+				gears.forEach( g => g.calculateRatio().positionGear().rotateGear())
+			},
+			removeGear: function() {
+				scene.remove(gear.mesh)
+				gear.remove();
+				gears.delete(gear);
+				gears.forEach( g => {
+					g.rotation = 0;
+					g.calculateRatio().positionGear().rotateGear();
+				});
+				Object(_gui__WEBPACK_IMPORTED_MODULE_4__["removeFolder"])(systemGui, gui);
+			},
+			angle: Object(_math__WEBPACK_IMPORTED_MODULE_3__["radToDeg"])(gear.angle),
+			teeth: gear.teeth
+		};
+		gear.addToScene(scene);
+		gears.add(gear);
+		gui = Object(_gui__WEBPACK_IMPORTED_MODULE_4__["addGearGui"])(obj, systemGui, `gear ${gears.size}`);
+	},
+	changeMod: function(value) {
+		gears.forEach( gear => {
+			gear.rotation = 0;
+			gear.mod = value;
+			scene.remove(gear.mesh);
+			scene.add(gear.reset());
+			gear.calculateRatio();
+			gear.positionGear();
+			gear.rotateGear();
+		});
+	}
+};
+Object(_gui__WEBPACK_IMPORTED_MODULE_4__["addSystemGui"])(gearControls, gui);
+
+const renderer = new three__WEBPACK_IMPORTED_MODULE_0__["WebGLRenderer"]({ antialias: true, alpha: true})
+renderer.setClearColor( 0xffffff, 0 );
+camera.position.z = 40;
+
+// canvas stuff
+renderer.setSize( window.innerWidth, window.innerHeight );
+document.body.appendChild( renderer.domElement );
+window.addEventListener( 'resize', () => {
+	let width = window.innerWidth
+	let height = window.innerHeight
+	renderer.setSize( width, height )
+	camera.aspect = width / height
+	camera.updateProjectionMatrix()
+})
+
+
+// camera controls
+const cameraControls = new three_examples_jsm_controls_TrackballControls_js__WEBPACK_IMPORTED_MODULE_1__["TrackballControls"]( camera, renderer.domElement );
+cameraControls.rotateSpeed = 1.0;
+cameraControls.zoomSpeed = 1.2;
+cameraControls.panSpeed = 0.8;
+cameraControls.staticMoving = true;
+cameraControls.dynamicDampingFactor = 0.3;
+
+
+// lights
+const directionalLight = new three__WEBPACK_IMPORTED_MODULE_0__["DirectionalLight"]( 0xffffff, 0.6 );
+directionalLight.position.set( 0.75, 0.75, 1.0 ).normalize();
+directionalLight.castShadow = true;
+scene.add( directionalLight );
+
+for (var i = 0; i < 5; i++) {
+	// add 5 random gears
+	gearControls.addGear()
+}
+
+function animate() {
+	requestAnimationFrame( animate )
+
+	gears.forEach(gear => gear.driveBy(gearControls.speed));
+
+	cameraControls.update();
+	renderer.render( scene, camera )
+}
+animate()
+
+/***/ }),
+
+/***/ "./src/math.js":
+/*!*********************!*\
+  !*** ./src/math.js ***!
+  \*********************/
+/*! exports provided: PI, cos, sin, sqrt, atan2, randChoose, randInt, randFloat, carToPol, polToCar, degToRad, radToDeg, involutePoint, generateInvoluteCurve, rotateVec2Array, rotateShape, reflectVec2Array */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "PI", function() { return PI; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "cos", function() { return cos; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "sin", function() { return sin; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "sqrt", function() { return sqrt; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "atan2", function() { return atan2; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "randChoose", function() { return randChoose; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "randInt", function() { return randInt; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "randFloat", function() { return randFloat; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "carToPol", function() { return carToPol; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "polToCar", function() { return polToCar; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "degToRad", function() { return degToRad; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "radToDeg", function() { return radToDeg; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "involutePoint", function() { return involutePoint; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "generateInvoluteCurve", function() { return generateInvoluteCurve; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "rotateVec2Array", function() { return rotateVec2Array; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "rotateShape", function() { return rotateShape; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "reflectVec2Array", function() { return reflectVec2Array; });
+/* harmony import */ var three__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! three */ "./node_modules/three/build/three.module.js");
+
+const INVOLUTE_STEP = 0.05;
+const ORIGIN_VEC2 = new three__WEBPACK_IMPORTED_MODULE_0__["Vector2"](0, 0);
+
+const PI = Math.PI;
+const cos = Math.cos;
+const sin = Math.sin;
+const sqrt = Math.sqrt;
+const atan2 = Math.atan2;
+
+
+function randChoose(array) {
 	const index = Math.floor(Math.random() * array.length);
 	return array[index];
+}
+
+function randInt(min, max) {
+	return Math.floor(Math.random() * (max - min) + min)
+}
+
+function randFloat(min, max) {
+	return Math.random() * (max - min) + min
 }
 
 // math conversion utils
@@ -52371,8 +52821,8 @@ function carToPol(x, y) {
 	// returns r / 'radius' (distance to origin)
 	// and w (angle from x axis - in RADIANS!!)
 	return {
-		r: Math.sqrt(x*x + y*y),
-		w: Math.atan2(y,x)
+		r: sqrt(x*x + y*y),
+		w: atan2(y,x)
 	}
 }
 
@@ -52428,371 +52878,12 @@ function rotateShape(shape, rotationAngle) {
 
 function reflectVec2Array(array, angle) {
 	// reflect array of vec2 in ray which makes angle with x-axis
-	return array.map((vec) => {
-		return new three__WEBPACK_IMPORTED_MODULE_0__["Vector2"](
+	return array.map(vec => new three__WEBPACK_IMPORTED_MODULE_0__["Vector2"](
 			cos(2 * angle) * vec.x + sin(2 * angle) * vec.y,
 			sin(2 * angle) * vec.x - cos(2 * angle) * vec.y	
 		)
-	})
+	)
 }
-
-function generateGearSegment(pitchAngle, baseRadius, maxRadius, minRadius, alpha) {
-	
-	const involutePoints1 = generateInvoluteCurve(baseRadius, maxRadius);
-	// const involutePoints2 = reflectVec2Array(involutePoints1, 1.045 * pitchAngle / 4);
-	const involutePoints2 = reflectVec2Array(involutePoints1, pitchAngle / 4 + alpha);
-	
-	const involuteToothProfile = involutePoints1.concat(involutePoints2.reverse());
-
-	const segmentShape = new three__WEBPACK_IMPORTED_MODULE_0__["Shape"]();
-	segmentShape.moveTo(baseRadius, 0);
-	segmentShape.setFromPoints(involuteToothProfile);
-	// TODO: add circular cutout
-	let pt = polToCar(minRadius, pitchAngle * 0.5 + 2 * alpha);
-	segmentShape.lineTo(pt.x, pt.y);
-
-	pt = polToCar(minRadius, pitchAngle)
-	segmentShape.lineTo(pt.x, pt.y);
-	segmentShape.lineTo(0,0);
-	segmentShape.points
-	return rotateShape(segmentShape, -1 * alpha);
-}
-
-function generateGearShapeFromParams(params) {
-	const segment = generateGearSegment(params.pitchAngle, params.baseCircleRadius, params.maxRadius, params.minRadius, params.alpha);
-	let segments = [];
-	for (var i = 0; i < params.teeth; i++) {
-		segments.push(rotateShape(segment, i * params.pitchAngle))
-	}
-	return segments
-}
-
-function generateGearParams(teeth, mod, pressureAngleDeg) {
-	const pressureAngle = degToRad(pressureAngleDeg);
-	const pitchAngle = 2 * PI / teeth;
-	const pitchCircleRadius = mod * teeth / 2;
-	const baseCircleRadius = pitchCircleRadius * cos(pressureAngle);
-	const addendum = mod;
-	const dedendum = 1.2 * mod;
-	const maxRadius = pitchCircleRadius + addendum;
-	const minRadius = pitchCircleRadius - dedendum;
-	const alpha = (sqrt(pitchCircleRadius**2 - baseCircleRadius**2) / baseCircleRadius) - pressureAngle;
-	return {
-		pressureAngle: pressureAngle,
-		pressureAngleDeg: pressureAngleDeg,
-		pitchAngle: pitchAngle,
-		pitchCircleRadius: pitchCircleRadius,
-		baseCircleRadius: baseCircleRadius,
-		addendum: addendum,
-		dedendum: dedendum,
-		maxRadius: maxRadius,
-		minRadius: minRadius,
-		alpha: alpha,
-		teeth: teeth,
-		mod: mod
-	}
-}
-
-function positionChildGears(gear, offsetX, offsetY) {
-	if (gear.childGears) {	
-		gear.childGears.forEach(cg => {
-			cg.setPosition(cg.x + offsetX, cg.y + offsetY);
-			positionChildGears(cg, offsetX, offsetY)
-		})
-	}
-}
-
-class Gear {
-
-	constructor(teeth, mod = 3, pressureAngleDeg = 20, pinion) {
-		
-		this.teeth = teeth;
-		this.mod = mod;
-
-		this.color = choose(COLORS);
-
-		this.parameters = generateGearParams(teeth, mod, pressureAngleDeg);
-		this.mesh = this.createGeometry(this.parameters);
-
-
-		// defaults:
-		this.angle = 0;
-		this.x = 0;
-		this.y = 0;
-
-		this.childGears = new Set();
-
-		if (pinion) {
-			this.pinion = pinion;
-		}
-
-		this.calculateRatio()
-
-	}
-
-	reset() {
-		this.parameters = generateGearParams(this.teeth, this.mod, this.parameters.pressureAngleDeg);
-		this.geometry.dispose();
-		this.material.dispose();
-		// this.mesh.dispose();
-
-		return this.createGeometry(this.parameters);
-	}
-
-	get rotation() {
-		return this.mesh.rotation.z
-	}
-
-	set rotation(rot) {
-		this.mesh.rotation.z = rot;
-	}
-
-	driveBy(angle) {
-		// rotate this gear as if it was being driven
-		// by its parent turning by an angle
-		this.rotation += angle * this.rotationSpeed;
-	}
-
-	createGeometry(parameters) {
-		const shape = generateGearShapeFromParams(parameters);
-		this.geometry = new three__WEBPACK_IMPORTED_MODULE_0__["ExtrudeBufferGeometry"](shape, {
-			depth: 2,
-			bevelEnabled: false
-		});		
-		this.material = new three__WEBPACK_IMPORTED_MODULE_0__["MeshLambertMaterial"]({
-			color: this.color,
-			// color: Math.random() * 0x0fffff,
-			opacity: 1 });
-		this.mesh = new three__WEBPACK_IMPORTED_MODULE_0__["Mesh"]( this.geometry, this.material );
-		return this.mesh;
-	}
-
-	addToScene(scene) {
-		scene.add(this.mesh);
-		return this
-	}
-
-	setPosition(x, y) {
-		this.x = x;
-		this.y = y;
-		this.mesh.position.x = x;
-		this.mesh.position.y = y;	
-	}
-
-	calculateRatio() {
-		if (this.pinion) {
-			this.ratio = this.pinion.teeth / this.teeth;
-			this.rotationSpeed = -1 * this.pinion.rotationSpeed * this.ratio;
-		} else {
-			this.ratio = 1;
-			this.rotationSpeed = 1;
-		}
-	}
-
-	positionGear() {
-		// position this gear relative to its pinion
-		if (this.pinion) {
-			// euclidean distance between centre of this gear and added gear:
-			const centreDistance = (this.mod * this.teeth + this.mod * this.pinion.teeth) / 2;
-			const offsetX = centreDistance * cos(this.angle);
-			const offsetY = centreDistance * sin(this.angle);
-			this.setPosition(
-				this.pinion.x + offsetX,
-				this.pinion.y + offsetY
-				);
-			// positionChildGears(this, offsetX, offsetY)
-		}
-	}
-
-	rotateGear() {
-		if (this.pinion) {
-			// rotate this gear and pretend to rotate pinion so
-			// their 'first teeth' touch and mesh together 
-			// since pinion is really at a different position
-			// we must use that position to drive this gear around
-			// as if they were always meshed together 
-			this.rotation += PI + this.angle;
-			this.rotation += (this.angle - this.pinion.rotation) * this.ratio;
-		}
-	}
-
-	addGear(teeth, angle) {
-		const newGear = new this.constructor(teeth, this.mod,
-			this.parameters.pressureAngleDeg,
-			this // keep reference to this gear as pinion of new gear
-		);
-
-		this.childGears.add(newGear);
-
-		newGear.angle = angle;
-		newGear.positionGear();
-		newGear.rotateGear();
-				
-		return newGear;
-	}
-}
-
-
-
-/***/ }),
-
-/***/ "./src/main.js":
-/*!*********************!*\
-  !*** ./src/main.js ***!
-  \*********************/
-/*! no exports provided */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var three__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! three */ "./node_modules/three/build/three.module.js");
-/* harmony import */ var three_examples_jsm_controls_TrackballControls_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! three/examples/jsm/controls/TrackballControls.js */ "./node_modules/three/examples/jsm/controls/TrackballControls.js");
-/* harmony import */ var _gear__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./gear */ "./src/gear.js");
-/* harmony import */ var dat_gui__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! dat.gui */ "./node_modules/dat.gui/build/dat.gui.module.js");
-
-
-
-
-
-
-
-const scene = new three__WEBPACK_IMPORTED_MODULE_0__["Scene"]()
-const camera = new three__WEBPACK_IMPORTED_MODULE_0__["PerspectiveCamera"](
-	75,
-	window.innerWidth / window.innerHeight,
-	0.1,
-	1000 )
-
-const systemGui = new dat_gui__WEBPACK_IMPORTED_MODULE_3__["GUI"]();
-
-const gears = new Set();
-
-function addGui(gear, label) {
-	let gui = systemGui.addFolder(label);
-	const obj = {
-		changeAngle: function(value) {
-			gears.forEach( g => g.rotation = 0 );
-			gear.angle = Object(_gear__WEBPACK_IMPORTED_MODULE_2__["degToRad"])(value);
-			gears.forEach( g => {
-				g.positionGear();
-				g.rotateGear();
-			});
-
-		},
-		changeTeeth: function(teeth) {
-			gears.forEach( g => g.rotation = 0 );
-			gear.teeth = teeth;
-			scene.remove(gear.mesh);
-			scene.add(gear.reset());
-
-			gears.forEach( g => {
-				g.calculateRatio();
-				g.positionGear();
-				g.rotateGear();
-			})
-		},
-		angle: Object(_gear__WEBPACK_IMPORTED_MODULE_2__["radToDeg"])(gear.angle),
-		teeth: gear.teeth
-	}
-	gui.add(obj, 'teeth', 10, 30, 1)
-		.onFinishChange(obj.changeTeeth);
-
-	gui.add(obj, 'angle', -180, 180)
-		.onFinishChange(obj.changeAngle);
-
-	return gui;
-};
-
-const gearControls = {
-	speed: 0.005,
-	system_mod: 2.1,
-	addGear: function() {
-		let newgear;
-		if (gears.size > 0) {
-			const lastGear = [...gears].pop();
-			// link new gear to last gear:
-			newgear = lastGear.addGear(
-				Math.floor(Math.random() * 10 + 11),
-				Math.random() * Math.PI - Math.PI/2 );
-		} else {
-			// create new gear
-			newgear = new _gear__WEBPACK_IMPORTED_MODULE_2__["Gear"](
-				Math.floor(Math.random() * 10 + 11),
-				this.system_mod);
-		}
-		addGui(newgear, `gear ${gears.size}`)
-		newgear.addToScene(scene);
-		gears.add(newgear);
-	},
-	changeMod: function(value) {
-		gears.forEach( gear => {
-			gear.rotation = 0;
-			gear.mod = value;
-			scene.remove(gear.mesh);
-			scene.add(gear.reset());
-			gear.calculateRatio();
-			gear.positionGear();
-			gear.rotateGear();
-		});
-	}
-};
-
-
-systemGui.add(gearControls, 'addGear');
-systemGui.add(gearControls, 'speed', -0.1, 0.1);
-systemGui.add(gearControls, 'system_mod', 1, 3.0)
-	.onFinishChange(gearControls.changeMod);
-
-systemGui.closed = true;
-
-const renderer = new three__WEBPACK_IMPORTED_MODULE_0__["WebGLRenderer"]({ antialias: true, alpha: true})
-renderer.setClearColor( 0xffffff, 0 );
-camera.position.z = 40;
-
-// canvas stuff
-renderer.setSize( window.innerWidth, window.innerHeight );
-document.body.appendChild( renderer.domElement );
-window.addEventListener( 'resize', () => {
-	let width = window.innerWidth
-	let height = window.innerHeight
-	renderer.setSize( width, height )
-	camera.aspect = width / height
-	camera.updateProjectionMatrix()
-})
-
-
-// camera controls
-const cameraControls = new three_examples_jsm_controls_TrackballControls_js__WEBPACK_IMPORTED_MODULE_1__["TrackballControls"]( camera, renderer.domElement );
-cameraControls.rotateSpeed = 1.0;
-cameraControls.zoomSpeed = 1.2;
-cameraControls.panSpeed = 0.8;
-cameraControls.staticMoving = true;
-cameraControls.dynamicDampingFactor = 0.3;
-
-
-// lights
-const directionalLight = new three__WEBPACK_IMPORTED_MODULE_0__["DirectionalLight"]( 0xffffff, 0.6 );
-directionalLight.position.set( 0.75, 0.75, 1.0 ).normalize();
-directionalLight.castShadow = true;
-scene.add( directionalLight );
-
-
-for (var i = 0; i < 5; i++) {
-	// add 5 random gears
-	gearControls.addGear()
-}
-
-function animate() {
-	requestAnimationFrame( animate )
-
-	gears.forEach((gear, i) => {
-		gear.driveBy(gearControls.speed);
-	})
-
-	cameraControls.update();
-	renderer.render( scene, camera )
-}
-animate()
 
 /***/ })
 
