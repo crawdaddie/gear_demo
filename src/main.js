@@ -14,6 +14,13 @@ const camera = new THREE.PerspectiveCamera(
 	1000 )
 
 
+
+// const aspect = window.innerWidth / window.innerHeight;
+// const d = 20;
+// const camera = new THREE.OrthographicCamera( - d * aspect, d * aspect, d, - d, 1, 1000 );
+// // camera.position.set( 20, 20, 20 ); // all components equal
+// camera.lookAt( scene.position ); // or the origin
+
 const gears = new Set();
 const gearControls = {
 	speed: 0.005,

@@ -1,6 +1,6 @@
-import * as THREE from "three";
+import { Vector2, Shape } from "three";
 const INVOLUTE_STEP = 0.05;
-const ORIGIN_VEC2 = new THREE.Vector2(0, 0);
+const ORIGIN_VEC2 = new Vector2(0, 0);
 
 export const PI = Math.PI;
 export const cos = Math.cos;
@@ -48,7 +48,7 @@ export function radToDeg(angle) {
 }
 
 export function involutePoint(t, baseRadius) {
-	return new THREE.Vector2(
+	return new Vector2(
 		baseRadius * (cos(t) + t * sin(t)),
 		baseRadius * (sin(t) - t * cos(t))
 	)	
@@ -56,7 +56,7 @@ export function involutePoint(t, baseRadius) {
 
 export function generateInvoluteCurve(baseRadius, maxRadius, step = INVOLUTE_STEP) {
 	const endPointParam = sqrt((maxRadius ** 2 / baseRadius ** 2) - 1 );
-	let pointsArray = [];
+	const pointsArray = [];
 	let t = 0;
 	let point = involutePoint(t, baseRadius);
 	while ( point.length() < maxRadius) {
@@ -78,13 +78,13 @@ export function rotateShape(shape, rotationAngle) {
 	if (rotationAngle % (2 * PI) == 0) {
 		return shape
 	} else {
-		return new THREE.Shape(rotateVec2Array(shape.getPoints(), rotationAngle));
+		return new Shape(rotateVec2Array(shape.getPoints(), rotationAngle));
 	}
 }
 
 export function reflectVec2Array(array, angle) {
 	// reflect array of vec2 in ray which makes angle with x-axis
-	return array.map(vec => new THREE.Vector2(
+	return array.map(vec => new Vector2(
 			cos(2 * angle) * vec.x + sin(2 * angle) * vec.y,
 			sin(2 * angle) * vec.x - cos(2 * angle) * vec.y	
 		)

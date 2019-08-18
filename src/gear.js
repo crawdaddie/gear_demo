@@ -46,7 +46,7 @@ function generateGearSegment(pitchAngle, baseRadius, maxRadius, minRadius, alpha
 
 function generateGearShapeFromParams(params) {
 	const segment = generateGearSegment(params.pitchAngle, params.baseCircleRadius, params.maxRadius, params.minRadius, params.alpha);
-	let segments = [];
+	const segments = [];
 	for (var i = 0; i < params.teeth; i++) {
 		segments.push(rotateShape(segment, i * params.pitchAngle))
 	}
